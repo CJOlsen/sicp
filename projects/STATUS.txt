@@ -1,0 +1,4 @@
+Project 1: finished, currently saved to a different computer
+Project 2: finished, lost to a "git rm -f" command
+Project 3: Exercise 7, need a better debugging approach
+Project 4: just getting started

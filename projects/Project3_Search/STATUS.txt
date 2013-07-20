@@ -1,0 +1,4 @@
+stuck on Exercise 7, unclear why searching the indexes made from random webs
+aren't returning any results -- the same procedures are working otherwise....
+
+code could be cleaned up a bit in general

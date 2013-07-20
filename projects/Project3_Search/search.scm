@@ -184,6 +184,10 @@
 
 ;; the new search-with-cycles
 (define (search-with-cycles initial-state goal? successors merge graph)
+  ;; initial-state: start node
+  ;; successors: computes successor states from current state
+  ;; merge: combnines new states with current states to explore
+  ;; graph: the graphs being searched (the-web for this problem)
   (define (search-inner still-to-do visited-nodes)
     (write-line (list 'visited-nodes: visited-nodes))
     (if (or (null? still-to-do)
@@ -437,15 +441,17 @@ test-index
 
 ;; Example use
 ;; 
- (define the-web-index (make-index))
+(define the-web-index (make-index))
  
- (add-document-to-index! the-web-index
-                         the-web
-                         'http://sicp.csail.mit.edu/)
-
- 
+(add-document-to-index! the-web-index
+			the-web
+			'http://sicp.csail.mit.edu/)
+(add-document-to-index! the-web-index
+			the-web
+			'http://sicp.csail.mit.edu/getting-help.html)
+(length the-web-index)
 (find-in-index the-web-index 'help)
-;Value: (http://sicp.csail.mit.edu/)
+;returns both urls from above
 
 (find-in-index the-web-index '*magic*)
 ;Value: #f
@@ -456,43 +462,44 @@ test-index
 
 ;; Exercise 5: Crawling the Web to Build a Web Index
 
-;; New search function
+;; **** this may need to be rewritten ****
 
 ;; the new search-with-cycles-and-procedure
-(define (search-with-cycles-and-procedure initial-state goal? successors
-					  merge graph node-procedure index)
-  (define (search-inner still-to-do visited-nodes)
-    (write-line (list 'visited-nodes: visited-nodes))
+(define (search-w-cycles-procedure-and-index2 initial-state goal? successors
+					     merge graph node-procedure index)
+  (define (search-inner still-to-do visited-nodes index)
     (if (or (null? still-to-do)
 	    (in-list? visited-nodes (car still-to-do)))
 	#f
-	(let ((current (car still-to-do)))
+	(let ((current-node (car still-to-do)))
 	  (if *search-debug*
-	      (write-line (list 'now-at current)))
-	  (node-procedure index graph current)
-	  (if (goal? current)
+	      (write-line (list 'now-at current-node)))
+	  (node-procedure index graph current-node)
+	  (write-line (list 'search-inner_index_length: (length index)))
+	  (if (goal? current-node)
 	      #t
 	      (search-inner
-	       (merge (successors graph current) (cdr still-to-do))
-	       (add-to-list visited-nodes current))))))
-  (search-inner (list initial-state) (list)))
+	       (merge (successors graph current-node) (cdr still-to-do))
+	       (add-to-list visited-nodes current-node)
+	       index)))))
+  (search-inner (list initial-state) (list) index))
 
 (define (BFS-web start goal? graph node-procedure index)
-  (search-with-cycles-and-procedure start
-				    goal?
-				    find-node-children
-				    (lambda (new old) (append new old))
-				    graph
-				    node-procedure
-				    index))
-
+  (search-w-cycles-procedure-and-index2 start
+				       goal?
+				       find-node-children
+				       (lambda (new old) (append new old))
+				       graph
+				       node-procedure
+				       index))
 (define (make-web-index web start)
   (let ((new-index (make-index)))
     (bfs-web start
-	     (lambda (x) #f) ;; goal that always returns false
+	     (lambda (x) #f) ;; always returns false
 	     the-web
 	     add-document-to-index!
 	     new-index) ;; this mutates the new-index data structure
+    (write-line (list 'make-web-index_index_length: (length new-index)))
     (lambda (word)
       (find-in-index new-index word))))
 
@@ -501,43 +508,199 @@ test-index
 (find-documents 'collaborative)
 ;Value: (http://sicp.csail.mit.edu/)
 
+(find-documents 'or)
+;Value: (http://sicp.csail.mit.edu/getting-help.html http://sicp.csail.mit.edu/schemeimplementations)
+
+
+(define (search-w-cycles-procedure-and-index-one initial-state goal? successors
+					     merge graph node-procedure index)
+  (define (search-inner still-to-do visited-nodes index)
+    (if (or (null? still-to-do)
+	    (in-list? visited-nodes (car still-to-do)))
+	#f
+	(let ((current-node (car still-to-do)))
+	  (if *search-debug*
+	      (write-line (list 'now-at current-node)))
+	  (node-procedure index graph current-node)
+	  (if (goal? current-node)
+	      current-node
+	      (search-inner
+	       (merge (successors graph current-node) (cdr still-to-do))
+	       (add-to-list visited-nodes current-node)
+	       index)))))
+  (search-inner (list initial-state) (list) index))
+
 
 
 ;Execise 6: A Dynamic Web Search
 
+;; this searches the entire graph and returns *all* matches
 
-;(define (find-URL-links web url)
-;  (find-node-children web url))
-;
-;(define (find-URL-text web url)
-;  (find-node-contents web url))
+(define (search-with-cycles-all2 initial-state goal? successors merge graph)
+  ;; this turned out to be a bit of a mess to write
+  ;;  successors: function to find new nodes
+  ;;  merge: function to combine to-do list
+  ;;  goal? will recieve 2 arguments, the graph and current-node
+  (define (search-inner2 still-to-do visited-nodes successes)
+    ;; still-to-do: a list of nodes to visit (including current)
+    ;; visited-nodes: a list of visited nodes
+    ;; successes: a list of successful matches
+    (if (null? still-to-do)
+	successes
+	(let ((the-current-node (car still-to-do)))
+	  (cond ((member? visited-nodes the-current-node)
+		 successes)
+		((goal? graph the-current-node)
+		 (search-inner2 (merge (successors graph the-current-node)
+				       (cdr still-to-do))
+				(add-to-list visited-nodes the-current-node)
+				(append (list the-current-node) successes)))
+		(else
+		 (search-inner2 (merge (successors graph the-current-node)
+				       (cdr still-to-do))
+				(add-to-list visited-nodes the-current-node)
+				successes))))))
+  (search-inner2 (list initial-state) () ()))
+			  
+(define (search-all web start-node word)
+  (search-with-cycles-all2 start-node
+			   (lambda (graph current-node)
+			     (let ((y (find-graph-element graph current-node)))
+			       (if (null? y)
+				   #f
+				   (member? (graph-element->contents y)
+					    word))))
+			   find-node-children
+			   (lambda (new old) (append new old))
+			   web))
 
-(define (search-any web start-node word)
-  (search-with-cycles start
-		      lambda
-		      find-node-children
-		      (lambda (new old) (append new old))
-		      the-web)
+(search-all the-web 'http://sicp.csail.mit.edu/ 'collaborative)
+;Value: (http://sicp.csail.mit.edu/)
 
-(define (search-any web start-node word)
-  ()
-  (define (search-helper still-to-do successor)
+(search-all the-web 'http://sicp.csail.mit.edu/ 'or)
+;Value: (http://sicp.csail.mit.edu/getting-help.html http://sicp.csail.mit.edu/schemeimplementations)
+
+
+(define (search-with-cycles-any initial-state goal? successors merge graph)
+  ;; this turned out to be a bit of a mess to write
+  ;;  successors: function to find new nodes
+  ;;  merge: function to combine to-do list
+  ;;  goal? will recieve 2 arguments, the graph and current-node
+  (define (search-inner still-to-do visited-nodes)
+    ;; still-to-do: a list of nodes to visit (including current)
+    ;; visited-nodes: a list of visited nodes
+    ;;(define the-current-node (car still-to-do))
     (if (null? still-to-do)
 	#f
-	(let ((current (car still-to-do)))
-	  (if *search-debug*
-	      (write-line (list 'now-at current)))
-	  (if (goal? current)
-	      current
-	      (search-helper
-	       (merge (successors graph current) (cdr still-to-do)))))))
-  (search-helper (list start-node) find-node-children)
-	  
+	(let ((the-current-node (car still-to-do)))
+	  (cond ((member? visited-nodes the-current-node)
+		 #f)
+		((goal? graph the-current-node)
+		 the-current-node)
+		(else
+		 (search-inner (merge (successors graph
+						  the-current-node)
+				      (cdr still-to-do))
+			       (add-to-list visited-nodes
+					    the-current-node)))))))
+  (search-inner (list initial-state) ()))
 
-(define (seach-all web start-node word)
-  
+(define (search-any web start-node word)
+  (search-with-cycles-any start-node
+			  (lambda (graph current-node)
+			    (let ((y (find-graph-element graph current-node)))
+			      (if (null? y)
+				  #f
+				  (member? (graph-element->contents y)
+					   word))))
+			  find-node-children
+			  (lambda (new old) (append new old))
+			  web))
 
-graph-element->contents element
+
+(search-any the-web 'http://sicp.csail.mit.edu/ 'collaborative)
+;Value: http://sicp.csail.mit.edu/
+
+(search-any the-web 'http://sicp.csail.mit.edu/ 'or)
+;Value: http://sicp.csail.mit.edu/schemeimplementations
+
+;;;; These all match the earlier search implementation
+
+
+
+;; ****
+;; **** Computer Exercise 7: Comparison - Web Index vs. Dynamic Search
+;; ****
+
+;; n = 10
+(define first-web (generate-random-web 10))
+(define first-page (caaddr (cadr first-web)))
+
+(timed search-any first-web first-page 'help)
+time expended: .00999999999999801
+
+(timed search-any first-web first-page 'Susanhockfield)
+;time expended: 0.
+
+(timed search-all first-web first-page 'help)
+;time expended: 0.
+
+(define find-documents-1 (timed make-web-index first-web first-page))
+;time expended: 0.
+
+(timed find-documents-1 'help)
+;time expended: 0.
+
+(timed find-documents-1 'Susanhockfield)
+;time expended: 0.
+
+;; n = 50
+(define second-web (generate-random-web 50))
+(define second-page (caaddr (cadr first-web)))
+
+(timed search-any second-web second-page 'help) ;; really?  'help not found?
+;time expended: 0.
+
+(timed search-any second-web second-page 'Susanhockfield)
+;time expended: 0.
+
+(timed search-all second-web second-page 'help)
+;time expended: 0.
+
+(define find-documents-2 (timed make-web-index second-web second-page))
+;time expended: 0.
+
+(timed find-documents-2 'help)
+;time expended: 0.
+
+(timed find-documents-2 'Susanhockfield)
+;time expended: 0.
+
+
+;; n = 199
+(define third-web (generate-random-web 199))
+(define third-page (graph-root first-web))
+
+(timed search-any third-web third-page 'help)
+;time expended: 0.
+
+(timed search-any third-web third-page 'Susanhockfield)
+;time expended: .03999999999999204
+
+(timed search-all third-web third-page 'help)
+;time expended: .03999999999999204
+
+(define find-documents-3 (timed make-web-index third-web third-page))
+;time expended: 0.
+
+(timed find-documents-3 'help)
+;time expended: 0. ;; but it didn't find anything :/
+
+(timed find-documents-3 'Susanhockfield)
+;time expended: 0.
+
+
+
 
 
 ;;------------------------------------------------------------
@@ -552,6 +715,13 @@ graph-element->contents element
       (display (- (runtime) start))
       val)))
 
+
+(timed list . '1)
+
+
+;;
+;; Exercise 8: Using A Better Indexing Scheme
+;;
 
 
 
